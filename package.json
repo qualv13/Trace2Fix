@@ -4,6 +4,14 @@
   "type": "module",
   "description": "A proof of concept that turns a deployed-image vulnerability into an attributable remediation plan.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qualv13/Trace2Fix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qualv13/Trace2Fix/issues"
+  },
+  "homepage": "https://github.com/qualv13/Trace2Fix#readme",
   "bin": {
     "trace2fix": "bin/trace2fix.js"
   },

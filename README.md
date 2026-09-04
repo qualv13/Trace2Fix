@@ -1,5 +1,7 @@
 # Trace2Fix
 
+[![CI](https://github.com/qualv13/Trace2Fix/actions/workflows/ci.yml/badge.svg)](https://github.com/qualv13/Trace2Fix/actions/workflows/ci.yml)
+
 Trace2Fix is a deliberately small proof of concept for one question that
 container scanners do not answer end-to-end:
 
