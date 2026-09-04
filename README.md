@@ -1,6 +1,7 @@
 # Trace2Fix
 
 [![CI](https://github.com/qualv13/Trace2Fix/actions/workflows/ci.yml/badge.svg)](https://github.com/qualv13/Trace2Fix/actions/workflows/ci.yml)
+[![Trusted E2E](https://github.com/qualv13/Trace2Fix/actions/workflows/trusted-e2e.yml/badge.svg)](https://github.com/qualv13/Trace2Fix/actions/workflows/trusted-e2e.yml)
 
 Trace2Fix is a deliberately small proof of concept for one question that
 container scanners do not answer end-to-end:
@@ -92,6 +93,23 @@ trace2fix inspect \
 This mode still invokes `kubectl` and `trivy`, but marks provenance verification
 as `not-performed`. It is suitable for testing the correlation workflow, not
 for producing trusted security evidence.
+
+## Trusted end-to-end check
+
+The manually triggered
+[`Trusted end-to-end`](https://github.com/qualv13/Trace2Fix/actions/workflows/trusted-e2e.yml)
+workflow exercises the trusted path against real tools. It builds and publishes
+an immutable [GHCR test image](https://github.com/qualv13/Trace2Fix/pkgs/container/trace2fix-e2e),
+creates a keyless SLSA provenance v1 attestation with GitHub OIDC, deploys the
+image to a temporary Kind cluster, scans it with Trivy and runs
+`trace2fix inspect`. The check fails unless at least one remediation plan is
+produced and every plan contains the deployed digest and
+`verification.status: verified`.
+
+The fixture intentionally uses an old base image so that the scan has real
+findings. It is labeled as non-production and should never be used as an
+application base image. Actions and tool versions in the workflow are pinned;
+upgrades are reviewed explicitly.
 
 External commands have a five-minute timeout by default. Use
 `--timeout-seconds` to select a value from 1 to 1800 seconds. If one command
