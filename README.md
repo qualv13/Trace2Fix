@@ -1,0 +1,80 @@
+# Trace2Fix
+
+Trace2Fix is a deliberately small proof of concept for one question that
+container scanners do not answer end-to-end:
+
+> A vulnerable package is running in this Kubernetes workload. Where should we
+> change the source, and how do we prove the replacement is deployed?
+
+It receives Kubernetes workloads, a Trivy report, and an in-toto/SLSA
+provenance statement. It accepts the result only when the image digest agrees
+in all three places, then emits reviewable remediation plans.
+
+## Why this is not another scanner
+
+Trivy and Kubescape already scan images and clusters well. Trace2Fix consumes
+their evidence; it does not rescan, operate a controller, or create PRs. The
+experiment is whether the **evidence-to-remediation** hand-off is painful
+enough for platform and AppSec teams to adopt a focused tool.
+
+## Run the demo
+
+Requires Node.js 20+.
+
+```bash
+npm ci
+npm run check
+npm test
+npm run demo
+```
+
+The command produces a JSON report with the vulnerable component, the exact
+workload and immutable digest, the source repository and revision from
+provenance, a remediation suggestion, and verification steps.
+
+To analyze a real Trivy JSON report exported for an image:
+
+```bash
+trace2fix analyze \
+  --workload deployments.json \
+  --trivy trivy.json \
+  --provenance provenance.json \
+  --cve CVE-2026-0001
+```
+
+## Inputs
+
+`--workload` accepts a single Kubernetes workload or a `List` returned by
+`kubectl get ... -o json`. For controllers, container images must be pinned by
+digest. For Pods, Trace2Fix can use the immutable `imageID` reported in
+`status.containerStatuses`, so a practical input is `kubectl get pods -A -o
+json` even when the manifest uses tags.
+`--trivy` accepts the JSON produced by `trivy image --format json`. For fixture
+and integration testing, `--finding` accepts the normalized internal format.
+`--provenance` accepts an in-toto Statement containing an SLSA provenance
+predicate. The subject's SHA-256 must equal both the finding and the deployed
+container image digest.
+
+## Deliberate boundaries
+
+- No connection to a Kubernetes API yet; fixtures make the evidence model easy
+  to test and demonstrate.
+- No trust verification yet; the report marks provenance as `not-performed`.
+  Consumers must verify its signature (for example with Sigstore) before using
+  it as security evidence.
+- No automatic ticket or PR creation. The plan is `needs-review` by design.
+
+## Validation gate
+
+We proceed beyond this prototype only if interviews show that at least three
+platform/AppSec engineers manually correlate deployment, digest, provenance,
+repository and ownership during vulnerability remediation. The next increment
+would be a read-only Kubernetes collector and a Trivy/Kubescape adapter—not a
+new scanner or dashboard.
+
+The interview script and explicit stop conditions are in
+[`docs/validation.md`](docs/validation.md).
+
+## License
+
+MIT
