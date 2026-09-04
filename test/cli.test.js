@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { run } from '../src/cli.js';
+import { readFile } from 'node:fs/promises';
 
 const command = [
   'analyze',
@@ -79,4 +80,66 @@ test('CLI accepts provenance verified by cosign', async () => {
   assert.equal(exitCode, 0);
   assert.equal(verificationOptions.image, `ghcr.io/acme/orders@sha256:${digest}`);
   assert.equal(report.plans[0].evidence.provenance.verification.status, 'verified');
+});
+
+test('inspect runs the read-only end-to-end workflow', async () => {
+  const capture = captureOutput();
+  const digest = 'a'.repeat(64);
+  const fixture = async (name) => JSON.parse(
+    await readFile(new URL(`../examples/${name}`, import.meta.url), 'utf8'),
+  );
+  const calls = [];
+  const dependencies = {
+    collectPods: async (options) => {
+      calls.push(['collectPods', options]);
+      const deployment = await fixture('deployment.json');
+      deployment.kind = 'Pod';
+      deployment.spec = deployment.spec.template.spec;
+      return { kind: 'List', items: [deployment] };
+    },
+    scanImage: async (image) => {
+      calls.push(['scanImage', image]);
+      return fixture('trivy.json');
+    },
+    verifyAttestation: async (options) => {
+      calls.push(['verifyAttestation', options]);
+      return {
+        statement: await fixture('provenance.json'),
+        verification: { status: 'verified', verifier: 'cosign' },
+      };
+    },
+  };
+  const image = `ghcr.io/acme/orders@sha256:${digest}`;
+  const exitCode = await run([
+    'inspect',
+    '--image', image,
+    '--kube-context', 'staging',
+    '--namespace', 'payments',
+    '--certificate-identity', 'release-workflow',
+    '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com',
+  ], capture.output, dependencies);
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls[0], ['collectPods', { context: 'staging', namespace: 'payments' }]);
+  assert.deepEqual(calls[1], ['scanImage', image]);
+  assert.equal(calls[2][0], 'verifyAttestation');
+  assert.equal(JSON.parse(capture.stdout[0]).summary.plans, 1);
+});
+
+test('inspect validates trust constraints before invoking tools', async () => {
+  const calls = [];
+  const dependencies = {
+    collectPods: async () => calls.push('kubectl'),
+    scanImage: async () => calls.push('trivy'),
+    verifyAttestation: async () => calls.push('cosign'),
+  };
+
+  await assert.rejects(
+    () => run([
+      'inspect',
+      '--image', `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`,
+    ], captureOutput().output, dependencies),
+    /requires exact certificate identity/,
+  );
+  assert.deepEqual(calls, []);
 });
