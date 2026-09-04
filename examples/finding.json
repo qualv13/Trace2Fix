@@ -1,0 +1,7 @@
+{
+  "id": "CVE-2026-0001",
+  "severity": "high",
+  "image": { "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+  "component": { "name": "openssl", "type": "os-pkg", "version": "3.0.2" },
+  "fixedVersion": "3.0.15-r0"
+}

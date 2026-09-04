@@ -1,0 +1,11 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [{ "name": "ghcr.io/acme/orders", "digest": { "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } }],
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "https://slsa.dev/container-based-build/v0.1",
+      "resolvedDependencies": [{ "uri": "git+https://github.com/acme/orders.git", "digest": { "gitCommit": "1a2b3c4d" } }]
+    }
+  }
+}

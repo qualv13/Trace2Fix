@@ -1,0 +1,22 @@
+{
+  "name": "trace2fix",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A proof of concept that turns a deployed-image vulnerability into an attributable remediation plan.",
+  "license": "MIT",
+  "bin": {
+    "trace2fix": "bin/trace2fix.js"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "scripts": {
+    "check": "node --check bin/trace2fix.js && node --check src/cli.js && node --check src/input.js && node --check src/plan.js && node --check src/trivy.js",
+    "test": "node --test",
+    "demo": "node bin/trace2fix.js analyze --workload examples/deployment.json --trivy examples/trivy.json --provenance examples/provenance.json --cve CVE-2026-0001"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
