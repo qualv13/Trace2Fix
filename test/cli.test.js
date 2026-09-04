@@ -97,8 +97,8 @@ test('inspect runs the read-only end-to-end workflow', async () => {
       deployment.spec = deployment.spec.template.spec;
       return { kind: 'List', items: [deployment] };
     },
-    scanImage: async (image) => {
-      calls.push(['scanImage', image]);
+    scanImage: async (options) => {
+      calls.push(['scanImage', options]);
       return fixture('trivy.json');
     },
     verifyAttestation: async (options) => {
@@ -115,13 +115,22 @@ test('inspect runs the read-only end-to-end workflow', async () => {
     '--image', image,
     '--kube-context', 'staging',
     '--namespace', 'payments',
+    '--timeout-seconds', '30',
     '--certificate-identity', 'release-workflow',
     '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com',
   ], capture.output, dependencies);
 
   assert.equal(exitCode, 0);
-  assert.deepEqual(calls[0], ['collectResources', { context: 'staging', namespace: 'payments' }]);
-  assert.deepEqual(calls[1], ['scanImage', image]);
+  assert.equal(calls[0][0], 'collectResources');
+  assert.deepEqual(
+    { ...calls[0][1], signal: undefined },
+    { context: 'staging', namespace: 'payments', timeoutMs: 30_000, signal: undefined },
+  );
+  assert.ok(calls[0][1].signal instanceof AbortSignal);
+  assert.equal(calls[1][0], 'scanImage');
+  assert.equal(calls[1][1].image, image);
+  assert.equal(calls[1][1].timeoutMs, 30_000);
+  assert.equal(calls[1][1].signal, calls[0][1].signal);
   assert.equal(calls[2][0], 'verifyAttestation');
   assert.equal(JSON.parse(capture.stdout[0]).summary.plans, 1);
 });
@@ -142,4 +151,55 @@ test('inspect validates trust constraints before invoking tools', async () => {
     /requires exact certificate identity/,
   );
   assert.deepEqual(calls, []);
+});
+
+test('inspect rejects an invalid timeout before invoking tools', async () => {
+  const calls = [];
+  const dependencies = {
+    collectResources: async () => calls.push('kubectl'),
+    scanImage: async () => calls.push('trivy'),
+    verifyAttestation: async () => calls.push('cosign'),
+  };
+  await assert.rejects(
+    () => run([
+      'inspect',
+      '--image', `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`,
+      '--certificate-identity', 'release-workflow',
+      '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com',
+      '--timeout-seconds', 'forever',
+    ], captureOutput().output, dependencies),
+    /must be an integer/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('inspect cancels remaining work when one tool fails', async () => {
+  const signals = [];
+  const waitForCancellation = (options) => {
+    signals.push(options.signal);
+    return new Promise((resolve) => {
+      options.signal.addEventListener('abort', () => resolve({}), { once: true });
+    });
+  };
+  const dependencies = {
+    collectResources: async (options) => {
+      signals.push(options.signal);
+      throw new Error('cluster unavailable');
+    },
+    scanImage: waitForCancellation,
+    verifyAttestation: waitForCancellation,
+  };
+
+  await assert.rejects(
+    () => run([
+      'inspect',
+      '--image', `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`,
+      '--certificate-identity', 'release-workflow',
+      '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com',
+    ], captureOutput().output, dependencies),
+    /cluster unavailable/,
+  );
+  assert.equal(signals.length, 3);
+  assert.ok(signals.every((signal) => signal === signals[0]));
+  assert.equal(signals[0].aborted, true);
 });

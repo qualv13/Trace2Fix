@@ -10,7 +10,7 @@ import { digestFromImageReference } from './input.js';
 export function usage() {
   return `Usage:
   trace2fix analyze --workload <workload.json> (--trivy <report.json> | --finding <finding.json>) [provenance options] [--cve <id>]
-  trace2fix inspect --image <image@sha256:digest> [--kube-context <name>] [--namespace <name>] --certificate-identity <identity> --certificate-oidc-issuer <issuer> [--cve <id>]
+  trace2fix inspect --image <image@sha256:digest> [--kube-context <name>] [--namespace <name>] --certificate-identity <identity> --certificate-oidc-issuer <issuer> [--timeout-seconds <n>] [--cve <id>]
 
 Provenance options:
   --provenance <statement.json>
@@ -43,6 +43,7 @@ export async function run(args, output = console, dependencies = {}) {
       image: { type: 'string' },
       'kube-context': { type: 'string' },
       namespace: { type: 'string' },
+      'timeout-seconds': { type: 'string' },
       cve: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -83,6 +84,7 @@ async function runAnalysis(values, dependencies) {
     values.image ||
     values['kube-context'] ||
     values.namespace ||
+    values['timeout-seconds'] ||
     Boolean(findingPath) === Boolean(trivyPath) ||
     Boolean(provenancePath) === Boolean(attestationImage)
   ) {
@@ -126,19 +128,49 @@ async function runInspection(values, dependencies) {
   if (!values['certificate-identity'] || !values['certificate-oidc-issuer']) {
     throw new Error('Live inspection requires exact certificate identity and OIDC issuer.');
   }
+  const timeoutMs = timeoutMilliseconds(values['timeout-seconds']);
+  const abortController = new AbortController();
 
-  const [workloads, trivyReport, provenance] = await Promise.all([
-    (dependencies.collectResources ?? collectResources)({
-      context: values['kube-context'],
-      namespace: values.namespace,
-    }),
-    (dependencies.scanImage ?? scanImage)(image),
-    (dependencies.verifyAttestation ?? verifyAttestation)({
-      image,
-      certificateIdentity: values['certificate-identity'],
-      certificateOidcIssuer: values['certificate-oidc-issuer'],
-    }),
-  ]);
+  let workloads;
+  let trivyReport;
+  let provenance;
+  try {
+    [workloads, trivyReport, provenance] = await Promise.all([
+      (dependencies.collectResources ?? collectResources)({
+        context: values['kube-context'],
+        namespace: values.namespace,
+        timeoutMs,
+        signal: abortController.signal,
+      }),
+      (dependencies.scanImage ?? scanImage)({
+        image,
+        timeoutMs,
+        signal: abortController.signal,
+      }),
+      (dependencies.verifyAttestation ?? verifyAttestation)({
+        image,
+        certificateIdentity: values['certificate-identity'],
+        certificateOidcIssuer: values['certificate-oidc-issuer'],
+        timeoutMs,
+        signal: abortController.signal,
+      }),
+    ]);
+  } catch (error) {
+    abortController.abort();
+    throw error;
+  }
   const findings = filterFindings(findingsFromTrivy(trivyReport), values.cve);
   return buildReport(workloads, findings, provenance);
+}
+
+function timeoutMilliseconds(value) {
+  if (value === undefined) return 5 * 60 * 1000;
+  if (!/^\d+$/.test(value)) {
+    throw new Error('--timeout-seconds must be an integer between 1 and 1800.');
+  }
+  const seconds = Number(value);
+  if (seconds < 1 || seconds > 1800) {
+    throw new Error('--timeout-seconds must be an integer between 1 and 1800.');
+  }
+  return seconds * 1000;
 }

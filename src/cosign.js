@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCallback);
 const SLSA_PROVENANCE_V1 = 'https://slsa.dev/provenance/v1';
+const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 function parseJsonDocuments(output) {
   const trimmed = output.trim();
@@ -40,7 +41,13 @@ export function statementFromCosignOutput(output) {
 }
 
 export async function verifyAttestation(options, execute = execFile) {
-  const { image, certificateIdentity, certificateOidcIssuer } = options;
+  const {
+    image,
+    certificateIdentity,
+    certificateOidcIssuer,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = options;
   if (!image || !certificateIdentity || !certificateOidcIssuer) {
     throw new Error('Cosign verification requires an image, certificate identity and OIDC issuer.');
   }
@@ -56,8 +63,18 @@ export async function verifyAttestation(options, execute = execFile) {
   ];
   let result;
   try {
-    result = await execute('cosign', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+    result = await execute('cosign', args, {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs),
+    });
   } catch (error) {
+    if (error.name === 'AbortError' || error.code === 'ABORT_ERR') {
+      if (signal?.aborted) throw new Error('Cosign verification cancelled.');
+      throw new Error(`Cosign verification timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`);
+    }
     const detail = error.stderr?.trim() || error.message;
     throw new Error(`Cosign verification failed: ${detail}`);
   }

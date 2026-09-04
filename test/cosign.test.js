@@ -45,7 +45,25 @@ test('uses exact certificate constraints when invoking cosign', async () => {
   ]);
   assert.equal(invocation.args.at(-2), '--');
   assert.equal(invocation.args.at(-1), `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`);
+  assert.ok(invocation.options.signal instanceof AbortSignal);
   assert.equal(result.verification.status, 'verified');
+});
+
+test('reports cosign timeouts separately', async () => {
+  const execute = async () => {
+    const error = new Error('aborted');
+    error.code = 'ABORT_ERR';
+    throw error;
+  };
+  await assert.rejects(
+    () => verifyAttestation({
+      image: `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`,
+      certificateIdentity: 'release-workflow',
+      certificateOidcIssuer: 'https://token.actions.githubusercontent.com',
+      timeoutMs: 3_000,
+    }, execute),
+    /timed out after 3 seconds/,
+  );
 });
 
 test('rejects output without SLSA provenance v1', () => {
