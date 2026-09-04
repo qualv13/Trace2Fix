@@ -68,6 +68,7 @@ trace2fix inspect \
   --image ghcr.io/acme/orders@sha256:... \
   --kube-context staging \
   --namespace payments \
+  --timeout-seconds 300 \
   --certificate-identity https://github.com/acme/orders/.github/workflows/release.yml@refs/heads/main \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -77,6 +78,10 @@ their standard workload controllers, scans the specified image and verifies
 its attestation concurrently. The image must be pinned by digest. Omitting
 `--namespace` reads resources from all namespaces visible to the current
 Kubernetes identity.
+
+External commands have a five-minute timeout by default. Use
+`--timeout-seconds` to select a value from 1 to 1800 seconds. If one command
+fails, Trace2Fix cancels the remaining collection work.
 
 For images referenced by a mutable tag, Trace2Fix takes the immutable digest
 from Pod status and follows Kubernetes `ownerReferences`, for example `Pod →
