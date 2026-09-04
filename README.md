@@ -72,10 +72,17 @@ trace2fix inspect \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-This path requires `kubectl`, `trivy`, and `cosign` on `PATH`. It reads Pods,
-scans the specified image and verifies its attestation concurrently. The image
-must be pinned by digest. Omitting `--namespace` reads Pods from all namespaces
-visible to the current Kubernetes identity.
+This path requires `kubectl`, `trivy`, and `cosign` on `PATH`. It reads Pods and
+their standard workload controllers, scans the specified image and verifies
+its attestation concurrently. The image must be pinned by digest. Omitting
+`--namespace` reads resources from all namespaces visible to the current
+Kubernetes identity.
+
+For images referenced by a mutable tag, Trace2Fix takes the immutable digest
+from Pod status and follows Kubernetes `ownerReferences`, for example `Pod →
+ReplicaSet → Deployment`. Multiple replicas of the same workload produce one
+plan with every observed Pod recorded as evidence. Missing owners are reported
+as unresolved; names are never used to guess ownership.
 
 ## Inputs
 
@@ -92,8 +99,9 @@ container image digest.
 
 ## Safety and boundaries
 
-- `inspect` only runs `kubectl get pods`; it does not create, patch or delete
-  Kubernetes resources.
+- `inspect` only runs `kubectl get` for Pods, ReplicaSets, Deployments,
+  StatefulSets, DaemonSets, Jobs and CronJobs; it does not create, patch or
+  delete Kubernetes resources.
 - External commands are executed directly without a shell. User values are
   passed as individual arguments.
 - A raw `--provenance` file is useful for local fixtures but is marked
