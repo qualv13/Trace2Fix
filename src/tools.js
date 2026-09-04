@@ -24,8 +24,17 @@ async function executeJson(file, args, label, execute) {
   }
 }
 
-export function collectPods(options = {}, execute = execFile) {
-  const args = ['get', 'pods'];
+export function collectResources(options = {}, execute = execFile) {
+  const resourceTypes = [
+    'pods',
+    'replicasets.apps',
+    'deployments.apps',
+    'statefulsets.apps',
+    'daemonsets.apps',
+    'jobs.batch',
+    'cronjobs.batch',
+  ].join(',');
+  const args = ['get', resourceTypes];
   if (options.context) args.push('--context', options.context);
   if (options.namespace) {
     args.push('--namespace', options.namespace);

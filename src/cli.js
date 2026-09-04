@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { buildReport } from './plan.js';
 import { findingsFromTrivy } from './trivy.js';
 import { verifyAttestation } from './cosign.js';
-import { collectPods, scanImage } from './tools.js';
+import { collectResources, scanImage } from './tools.js';
 import { digestFromImageReference } from './input.js';
 
 export function usage() {
@@ -128,7 +128,7 @@ async function runInspection(values, dependencies) {
   }
 
   const [workloads, trivyReport, provenance] = await Promise.all([
-    (dependencies.collectPods ?? collectPods)({
+    (dependencies.collectResources ?? collectResources)({
       context: values['kube-context'],
       namespace: values.namespace,
     }),

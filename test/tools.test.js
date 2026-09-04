@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectPods, scanImage } from '../src/tools.js';
+import { collectResources, scanImage } from '../src/tools.js';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 
@@ -15,21 +15,25 @@ function recorder(document = { kind: 'List', items: [] }) {
   };
 }
 
-test('collects Pods from all namespaces by default', async () => {
+test('collects runtime and owning resources from all namespaces by default', async () => {
   const recorded = recorder();
-  const result = await collectPods({ context: 'staging' }, recorded.execute);
+  const result = await collectResources({ context: 'staging' }, recorded.execute);
 
   assert.equal(result.kind, 'List');
   assert.deepEqual(recorded.calls[0].args, [
-    'get', 'pods', '--context', 'staging', '--all-namespaces', '--output', 'json',
+    'get',
+    'pods,replicasets.apps,deployments.apps,statefulsets.apps,daemonsets.apps,jobs.batch,cronjobs.batch',
+    '--context', 'staging', '--all-namespaces', '--output', 'json',
   ]);
 });
 
 test('limits Pod collection to an explicit namespace', async () => {
   const recorded = recorder();
-  await collectPods({ namespace: 'payments' }, recorded.execute);
+  await collectResources({ namespace: 'payments' }, recorded.execute);
   assert.deepEqual(recorded.calls[0].args, [
-    'get', 'pods', '--namespace', 'payments', '--output', 'json',
+    'get',
+    'pods,replicasets.apps,deployments.apps,statefulsets.apps,daemonsets.apps,jobs.batch,cronjobs.batch',
+    '--namespace', 'payments', '--output', 'json',
   ]);
 });
 
@@ -51,5 +55,5 @@ test('reports a missing external tool by name', async () => {
     error.code = 'ENOENT';
     throw error;
   };
-  await assert.rejects(() => collectPods({}, execute), /requires kubectl on PATH/);
+  await assert.rejects(() => collectResources({}, execute), /requires kubectl on PATH/);
 });

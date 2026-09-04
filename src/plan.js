@@ -1,4 +1,5 @@
 import { matchingContainers, normalizeDigest, workloadItems } from './input.js';
+import { resolveWorkloadOwner, resourceReference } from './ownership.js';
 
 function normalizeSubject(subject) {
   const digest = subject?.digest?.sha256;
@@ -68,7 +69,7 @@ export function buildRemediationPlan(workload, finding, provenance) {
   return planForContainer(workload, container, finding, provenanceFields(provenance));
 }
 
-function planForContainer(workload, container, finding, provenanceInfo) {
+function planForContainer(workload, container, finding, provenanceInfo, deploymentContext) {
   const findingDigest = normalizeDigest(finding?.image?.digest, 'Finding image digest');
   if (provenanceInfo.digest !== findingDigest) {
     throw new Error('Provenance subject digest does not match the vulnerable deployed image.');
@@ -94,6 +95,11 @@ function planForContainer(workload, container, finding, provenanceInfo) {
         container: container.name,
         image: container.image,
         imageDigest: findingDigest,
+        ownership: deploymentContext ?? {
+          resolved: true,
+          chain: [resourceReference(workload)],
+          observedIn: [resourceReference(workload)],
+        },
       },
       provenance: provenanceInfo,
     },
@@ -114,15 +120,59 @@ export function buildReport(workloadDocument, findings, provenance) {
 
   const workloads = workloadItems(workloadDocument);
   const provenanceInfo = provenanceFields(provenance);
-  const plans = [];
+  const groupedMatches = new Map();
   for (const finding of findings) {
     const digest = normalizeDigest(finding?.image?.digest, 'Finding image digest');
+    const matches = [];
     for (const workload of workloads) {
       for (const container of matchingContainers(workload, digest)) {
-        plans.push(planForContainer(workload, container, finding, provenanceInfo));
+        matches.push({ resource: workload, container });
       }
     }
+    const preferredMatches = matches.some(({ resource }) => resource.kind === 'Pod')
+      ? matches.filter(({ resource }) => resource.kind === 'Pod')
+      : matches;
+
+    for (const match of preferredMatches) {
+      const ownership = resolveWorkloadOwner(match.resource, workloads);
+      const target = resourceReference(ownership.workload);
+      const key = [
+        finding.id,
+        finding.component?.name,
+        finding.component?.version,
+        finding.source?.target,
+        digest,
+        target.kind,
+        target.namespace,
+        target.name,
+        match.container.name,
+      ].join('\0');
+      const existing = groupedMatches.get(key);
+      if (existing) {
+        existing.observedIn.push(resourceReference(match.resource));
+        continue;
+      }
+      groupedMatches.set(key, {
+        finding,
+        container: match.container,
+        ownership,
+        observedIn: [resourceReference(match.resource)],
+      });
+    }
   }
+
+  const plans = [...groupedMatches.values()].map((match) => planForContainer(
+    match.ownership.workload,
+    match.container,
+    match.finding,
+    provenanceInfo,
+    {
+      resolved: match.ownership.resolved,
+      chain: match.ownership.chain,
+      observedIn: match.observedIn,
+      ...(match.ownership.missingOwner ? { missingOwner: match.ownership.missingOwner } : {}),
+    },
+  ));
 
   if (plans.length === 0) {
     throw new Error('None of the findings refers to an image pinned in the supplied workloads.');

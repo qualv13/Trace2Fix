@@ -66,3 +66,55 @@ test('uses the resolved image digest reported by a Pod', () => {
   assert.equal(report.plans[0].evidence.deployment.name, 'orders-abc');
   assert.equal(report.plans[0].evidence.deployment.image, 'ghcr.io/acme/orders:main');
 });
+
+test('resolves replicated Pods to one owning Deployment plan', () => {
+  const deployment = structuredClone(workload);
+  deployment.spec.template.spec.containers[0].image = 'ghcr.io/acme/orders:main';
+  const replicaSet = {
+    apiVersion: 'apps/v1',
+    kind: 'ReplicaSet',
+    metadata: {
+      name: 'orders-7bd9d6f8b4',
+      namespace: 'production',
+      ownerReferences: [{ kind: 'Deployment', name: 'orders', controller: true }],
+    },
+    spec: deployment.spec,
+  };
+  const pod = (name) => ({
+    apiVersion: 'v1',
+    kind: 'Pod',
+    metadata: {
+      name,
+      namespace: 'production',
+      ownerReferences: [{ kind: 'ReplicaSet', name: replicaSet.metadata.name, controller: true }],
+    },
+    spec: { containers: [{ name: 'api', image: 'ghcr.io/acme/orders:main' }] },
+    status: {
+      containerStatuses: [{
+        name: 'api',
+        imageID: `containerd://ghcr.io/acme/orders@${digest}`,
+      }],
+    },
+  });
+  const firstPod = pod('orders-7bd9d6f8b4-abcde');
+  const secondPod = pod('orders-7bd9d6f8b4-fghij');
+
+  const report = buildReport(
+    { kind: 'List', items: [deployment, replicaSet, firstPod, secondPod] },
+    [finding],
+    provenance,
+  );
+
+  assert.deepEqual(report.summary, { plans: 1, vulnerabilities: 1, workloads: 1 });
+  const evidence = report.plans[0].evidence.deployment;
+  assert.equal(evidence.kind, 'Deployment');
+  assert.equal(evidence.name, 'orders');
+  assert.equal(evidence.ownership.resolved, true);
+  assert.deepEqual(evidence.ownership.chain.map(({ kind }) => kind), [
+    'Pod', 'ReplicaSet', 'Deployment',
+  ]);
+  assert.deepEqual(evidence.ownership.observedIn.map(({ name }) => name), [
+    firstPod.metadata.name,
+    secondPod.metadata.name,
+  ]);
+});

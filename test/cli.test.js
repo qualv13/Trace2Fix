@@ -90,8 +90,8 @@ test('inspect runs the read-only end-to-end workflow', async () => {
   );
   const calls = [];
   const dependencies = {
-    collectPods: async (options) => {
-      calls.push(['collectPods', options]);
+    collectResources: async (options) => {
+      calls.push(['collectResources', options]);
       const deployment = await fixture('deployment.json');
       deployment.kind = 'Pod';
       deployment.spec = deployment.spec.template.spec;
@@ -120,7 +120,7 @@ test('inspect runs the read-only end-to-end workflow', async () => {
   ], capture.output, dependencies);
 
   assert.equal(exitCode, 0);
-  assert.deepEqual(calls[0], ['collectPods', { context: 'staging', namespace: 'payments' }]);
+  assert.deepEqual(calls[0], ['collectResources', { context: 'staging', namespace: 'payments' }]);
   assert.deepEqual(calls[1], ['scanImage', image]);
   assert.equal(calls[2][0], 'verifyAttestation');
   assert.equal(JSON.parse(capture.stdout[0]).summary.plans, 1);
@@ -129,7 +129,7 @@ test('inspect runs the read-only end-to-end workflow', async () => {
 test('inspect validates trust constraints before invoking tools', async () => {
   const calls = [];
   const dependencies = {
-    collectPods: async () => calls.push('kubectl'),
+    collectResources: async () => calls.push('kubectl'),
     scanImage: async () => calls.push('trivy'),
     verifyAttestation: async () => calls.push('cosign'),
   };
