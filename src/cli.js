@@ -10,7 +10,7 @@ import { digestFromImageReference } from './input.js';
 export function usage() {
   return `Usage:
   trace2fix analyze --workload <workload.json> (--trivy <report.json> | --finding <finding.json>) [provenance options] [--cve <id>]
-  trace2fix inspect --image <image@sha256:digest> [--kube-context <name>] [--namespace <name>] --certificate-identity <identity> --certificate-oidc-issuer <issuer> [--timeout-seconds <n>] [--cve <id>]
+  trace2fix inspect --image <image@sha256:digest> [--kube-context <name>] [--namespace <name>] [provenance options] [--timeout-seconds <n>] [--cve <id>]
 
 Provenance options:
   --provenance <statement.json>
@@ -117,7 +117,6 @@ async function runInspection(values, dependencies) {
     values.workload ||
     values.trivy ||
     values.finding ||
-    values.provenance ||
     values['attestation-image']
   ) {
     throw new Error(`Live inspection accepts --image instead of file inputs.\n\n${usage()}`);
@@ -125,7 +124,13 @@ async function runInspection(values, dependencies) {
   if (!digestFromImageReference(image)) {
     throw new Error('Live inspection requires an image pinned by sha256 digest.');
   }
-  if (!values['certificate-identity'] || !values['certificate-oidc-issuer']) {
+  const provenancePath = values.provenance;
+  const certificateIdentity = values['certificate-identity'];
+  const certificateOidcIssuer = values['certificate-oidc-issuer'];
+  if (provenancePath && (certificateIdentity || certificateOidcIssuer)) {
+    throw new Error('Live inspection accepts either --provenance or certificate constraints, not both.');
+  }
+  if (!provenancePath && (!certificateIdentity || !certificateOidcIssuer)) {
     throw new Error('Live inspection requires exact certificate identity and OIDC issuer.');
   }
   const timeoutMs = timeoutMilliseconds(values['timeout-seconds']);
@@ -147,13 +152,15 @@ async function runInspection(values, dependencies) {
         timeoutMs,
         signal: abortController.signal,
       }),
-      (dependencies.verifyAttestation ?? verifyAttestation)({
-        image,
-        certificateIdentity: values['certificate-identity'],
-        certificateOidcIssuer: values['certificate-oidc-issuer'],
-        timeoutMs,
-        signal: abortController.signal,
-      }),
+      provenancePath
+        ? jsonFile(provenancePath)
+        : (dependencies.verifyAttestation ?? verifyAttestation)({
+          image,
+          certificateIdentity,
+          certificateOidcIssuer,
+          timeoutMs,
+          signal: abortController.signal,
+        }),
     ]);
   } catch (error) {
     abortController.abort();

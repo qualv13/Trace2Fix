@@ -153,6 +153,56 @@ test('inspect validates trust constraints before invoking tools', async () => {
   assert.deepEqual(calls, []);
 });
 
+test('inspect accepts an unverified provenance file without invoking cosign', async () => {
+  const capture = captureOutput();
+  const fixture = async (name) => JSON.parse(
+    await readFile(new URL(`../examples/${name}`, import.meta.url), 'utf8'),
+  );
+  let cosignCalled = false;
+  const dependencies = {
+    collectResources: async () => fixture('deployment.json'),
+    scanImage: async () => fixture('trivy.json'),
+    verifyAttestation: async () => {
+      cosignCalled = true;
+    },
+  };
+
+  const exitCode = await run([
+    'inspect',
+    '--image', `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`,
+    '--provenance', 'examples/provenance.json',
+  ], capture.output, dependencies);
+
+  assert.equal(exitCode, 0);
+  assert.equal(cosignCalled, false);
+  const report = JSON.parse(capture.stdout[0]);
+  assert.deepEqual(
+    report.plans[0].evidence.provenance.verification,
+    { status: 'not-performed' },
+  );
+});
+
+test('inspect rejects mixed provenance sources before invoking tools', async () => {
+  const calls = [];
+  const dependencies = {
+    collectResources: async () => calls.push('kubectl'),
+    scanImage: async () => calls.push('trivy'),
+    verifyAttestation: async () => calls.push('cosign'),
+  };
+
+  await assert.rejects(
+    () => run([
+      'inspect',
+      '--image', `ghcr.io/acme/orders@sha256:${'a'.repeat(64)}`,
+      '--provenance', 'examples/provenance.json',
+      '--certificate-identity', 'release-workflow',
+      '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com',
+    ], captureOutput().output, dependencies),
+    /either --provenance or certificate constraints/,
+  );
+  assert.deepEqual(calls, []);
+});
+
 test('inspect rejects an invalid timeout before invoking tools', async () => {
   const calls = [];
   const dependencies = {
