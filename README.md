@@ -79,6 +79,20 @@ its attestation concurrently. The image must be pinned by digest. Omitting
 `--namespace` reads resources from all namespaces visible to the current
 Kubernetes identity.
 
+For local evaluation or an air-gapped environment, `inspect` can read an
+existing provenance statement instead of invoking cosign:
+
+```bash
+trace2fix inspect \
+  --image ghcr.io/acme/orders@sha256:... \
+  --namespace payments \
+  --provenance provenance.json
+```
+
+This mode still invokes `kubectl` and `trivy`, but marks provenance verification
+as `not-performed`. It is suitable for testing the correlation workflow, not
+for producing trusted security evidence.
+
 External commands have a five-minute timeout by default. Use
 `--timeout-seconds` to select a value from 1 to 1800 seconds. If one command
 fails, Trace2Fix cancels the remaining collection work.
