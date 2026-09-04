@@ -13,9 +13,10 @@ in all three places, then emits reviewable remediation plans.
 ## Why this is not another scanner
 
 Trivy and Kubescape already scan images and clusters well. Trace2Fix consumes
-their evidence; it does not rescan, operate a controller, or create PRs. The
-experiment is whether the **evidence-to-remediation** hand-off is painful
-enough for platform and AppSec teams to adopt a focused tool.
+their evidence or invokes the existing Trivy CLI; it does not implement a
+scanner, operate a controller, or create PRs. The experiment is whether the
+**evidence-to-remediation** hand-off is painful enough for platform and AppSec
+teams to adopt a focused tool.
 
 ## Run the demo
 
@@ -58,6 +59,22 @@ This mode requires `cosign` on `PATH`. Trace2Fix uses `execFile`, passes each
 argument separately, requires SLSA provenance v1, and records the certificate
 constraints in the report.
 
+To collect the evidence without preparing intermediate files, use `inspect`:
+
+```bash
+trace2fix inspect \
+  --image ghcr.io/acme/orders@sha256:... \
+  --kube-context staging \
+  --namespace payments \
+  --certificate-identity https://github.com/acme/orders/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+This path requires `kubectl`, `trivy`, and `cosign` on `PATH`. It reads Pods,
+scans the specified image and verifies its attestation concurrently. The image
+must be pinned by digest. Omitting `--namespace` reads Pods from all namespaces
+visible to the current Kubernetes identity.
+
 ## Inputs
 
 `--workload` accepts a single Kubernetes workload or a `List` returned by
@@ -71,10 +88,12 @@ and integration testing, `--finding` accepts the normalized internal format.
 predicate. The subject's SHA-256 must equal both the finding and the deployed
 container image digest.
 
-## Deliberate boundaries
+## Safety and boundaries
 
-- No connection to a Kubernetes API yet; fixtures make the evidence model easy
-  to test and demonstrate.
+- `inspect` only runs `kubectl get pods`; it does not create, patch or delete
+  Kubernetes resources.
+- External commands are executed directly without a shell. User values are
+  passed as individual arguments.
 - A raw `--provenance` file is useful for local fixtures but is marked
   `not-performed`. Use the cosign options above when the report will be treated
   as security evidence.
@@ -84,9 +103,8 @@ container image digest.
 
 We proceed beyond this prototype only if interviews show that at least three
 platform/AppSec engineers manually correlate deployment, digest, provenance,
-repository and ownership during vulnerability remediation. The next increment
-would be a read-only Kubernetes collector and a Trivy/Kubescape adapter—not a
-new scanner or dashboard.
+repository and ownership during vulnerability remediation. We will not add
+automatic GitHub issues or remediation pull requests before that validation.
 
 The interview script and explicit stop conditions are in
 [`docs/validation.md`](docs/validation.md).
