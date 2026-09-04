@@ -6,12 +6,16 @@ function normalizeSubject(subject) {
 }
 
 function provenanceFields(provenance) {
-  const subjects = provenance?.subject;
+  const statement = provenance?.statement ?? provenance;
+  const verification = provenance?.statement
+    ? provenance.verification
+    : { status: 'not-performed' };
+  const subjects = statement?.subject;
   if (!Array.isArray(subjects)) {
     throw new Error('Invalid provenance: subject must be an array.');
   }
   const subject = subjects.find((item) => normalizeSubject(item));
-  const predicate = provenance?.predicate ?? {};
+  const predicate = statement?.predicate ?? {};
   const buildDefinition = predicate.buildDefinition ?? predicate;
   const source = buildDefinition.resolvedDependencies?.find((dependency) =>
     dependency?.uri?.startsWith('git+') || dependency?.uri?.startsWith('https://github.com/'),
@@ -21,7 +25,7 @@ function provenanceFields(provenance) {
     throw new Error('Provenance must identify a source repository and git commit.');
   }
   return {
-    verification: 'not-performed',
+    verification,
     digest: normalizeSubject(subject),
     sourceRepository: source?.replace(/^git\+/, '').replace(/\.git$/, ''),
     revision,

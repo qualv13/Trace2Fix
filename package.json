@@ -12,7 +12,7 @@
     "src/"
   ],
   "scripts": {
-    "check": "node --check bin/trace2fix.js && node --check src/cli.js && node --check src/input.js && node --check src/plan.js && node --check src/trivy.js",
+    "check": "node --check bin/trace2fix.js && node --check src/cli.js && node --check src/cosign.js && node --check src/input.js && node --check src/plan.js && node --check src/trivy.js",
     "test": "node --test",
     "demo": "node bin/trace2fix.js analyze --workload examples/deployment.json --trivy examples/trivy.json --provenance examples/provenance.json --cve CVE-2026-0001"
   },

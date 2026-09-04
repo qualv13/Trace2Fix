@@ -3,10 +3,15 @@ import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import { buildReport } from './plan.js';
 import { findingsFromTrivy } from './trivy.js';
+import { verifyAttestation } from './cosign.js';
 
 export function usage() {
   return `Usage:
-  trace2fix analyze --workload <workload.json> (--trivy <report.json> | --finding <finding.json>) --provenance <statement.json> [--cve <id>]
+  trace2fix analyze --workload <workload.json> (--trivy <report.json> | --finding <finding.json>) [provenance options] [--cve <id>]
+
+Provenance options:
+  --provenance <statement.json>
+  --attestation-image <image@digest> --certificate-identity <identity> --certificate-oidc-issuer <issuer>
 
 The workload may be a single resource or a Kubernetes List. Output is JSON.`;
 }
@@ -19,7 +24,7 @@ async function jsonFile(path) {
   }
 }
 
-export async function run(args, output = console) {
+export async function run(args, output = console, dependencies = {}) {
   const { positionals, values } = parseArgs({
     args,
     allowPositionals: true,
@@ -29,6 +34,9 @@ export async function run(args, output = console) {
       finding: { type: 'string' },
       trivy: { type: 'string' },
       provenance: { type: 'string' },
+      'attestation-image': { type: 'string' },
+      'certificate-identity': { type: 'string' },
+      'certificate-oidc-issuer': { type: 'string' },
       cve: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -44,8 +52,14 @@ export async function run(args, output = console) {
   }
 
   const { workload: workloadPath, finding: findingPath } = values;
-  const { trivy: trivyPath, provenance: provenancePath } = values;
-  if (!workloadPath || !provenancePath || Boolean(findingPath) === Boolean(trivyPath)) {
+  const trivyPath = values.trivy;
+  const provenancePath = values.provenance;
+  const attestationImage = values['attestation-image'];
+  if (
+    !workloadPath ||
+    Boolean(findingPath) === Boolean(trivyPath) ||
+    Boolean(provenancePath) === Boolean(attestationImage)
+  ) {
     throw new Error(`Expected one finding source and all required inputs.\n\n${usage()}`);
   }
 
@@ -61,10 +75,18 @@ export async function run(args, output = console) {
     );
   }
 
+  const provenance = provenancePath
+    ? await jsonFile(provenancePath)
+    : await (dependencies.verifyAttestation ?? verifyAttestation)({
+      image: attestationImage,
+      certificateIdentity: values['certificate-identity'],
+      certificateOidcIssuer: values['certificate-oidc-issuer'],
+    });
+
   const report = buildReport(
     await jsonFile(workloadPath),
     findings,
-    await jsonFile(provenancePath),
+    provenance,
   );
   output.log(JSON.stringify(report, null, 2));
   return 0;

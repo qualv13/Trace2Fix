@@ -15,7 +15,7 @@ test('ties a deployed vulnerable image to signed provenance and remediation', ()
   assert.equal(plan.status, 'needs-review');
   assert.equal(plan.evidence.deployment.container, 'api');
   assert.equal(plan.evidence.provenance.sourceRepository, 'https://github.com/acme/orders');
-  assert.equal(plan.evidence.provenance.verification, 'not-performed');
+  assert.deepEqual(plan.evidence.provenance.verification, { status: 'not-performed' });
   assert.equal(plan.recommendedChange.kind, 'rebuild-base-image');
 });
 
