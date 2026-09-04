@@ -42,6 +42,22 @@ trace2fix analyze \
   --cve CVE-2026-0001
 ```
 
+For trusted provenance, let Trace2Fix invoke cosign with an exact certificate
+identity:
+
+```bash
+trace2fix analyze \
+  --workload pods.json \
+  --trivy trivy.json \
+  --attestation-image ghcr.io/acme/orders@sha256:... \
+  --certificate-identity https://github.com/acme/orders/.github/workflows/release.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+This mode requires `cosign` on `PATH`. Trace2Fix uses `execFile`, passes each
+argument separately, requires SLSA provenance v1, and records the certificate
+constraints in the report.
+
 ## Inputs
 
 `--workload` accepts a single Kubernetes workload or a `List` returned by
@@ -59,9 +75,9 @@ container image digest.
 
 - No connection to a Kubernetes API yet; fixtures make the evidence model easy
   to test and demonstrate.
-- No trust verification yet; the report marks provenance as `not-performed`.
-  Consumers must verify its signature (for example with Sigstore) before using
-  it as security evidence.
+- A raw `--provenance` file is useful for local fixtures but is marked
+  `not-performed`. Use the cosign options above when the report will be treated
+  as security evidence.
 - No automatic ticket or PR creation. The plan is `needs-review` by design.
 
 ## Validation gate
