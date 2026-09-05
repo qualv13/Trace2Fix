@@ -156,6 +156,13 @@ automatic GitHub issues or remediation pull requests before that validation.
 The interview script and explicit stop conditions are in
 [`docs/validation.md`](docs/validation.md).
 
+## Contributing and security
+
+Changes should preserve the project's deliberately narrow scope and fail-closed
+trust model. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull
+request. Report suspected vulnerabilities privately as described in
+[`SECURITY.md`](SECURITY.md).
+
 ## License
 
 MIT
